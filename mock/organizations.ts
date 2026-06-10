@@ -1,0 +1,32 @@
+export const organizations = [
+  {
+    id: "org-001",
+    name: "ABC Technologies",
+    adminUserId: "abc-admin",
+    adminPassword: "ABC@2026",
+    admins: 3,
+    candidates: 150,
+    quizzes: 25,
+    status: "active",
+  },
+  {
+    id: "org-002",
+    name: "XYZ Institute",
+    adminUserId: "xyz-admin",
+    adminPassword: "XYZ@2026",
+    admins: 2,
+    candidates: 80,
+    quizzes: 14,
+    status: "active",
+  },
+  {
+    id: "org-003",
+    name: "Placement Academy",
+    adminUserId: "placement-admin",
+    adminPassword: "PLACE@2026",
+    admins: 1,
+    candidates: 120,
+    quizzes: 18,
+    status: "inactive",
+  },
+];
