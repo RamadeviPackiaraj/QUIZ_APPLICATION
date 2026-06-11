@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div key={toast.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-xl">
               <div className="flex items-start gap-3">
-                <Icon className={toast.tone === "success" ? "text-emerald-600" : "text-blue-700"} size={18} />
+                <Icon className={toast.tone === "success" ? "text-emerald-600" : "text-slate-950"} size={18} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-slate-900">{toast.title}</p>
                   {toast.message ? <p className="mt-1 text-xs leading-5 text-slate-500">{toast.message}</p> : null}

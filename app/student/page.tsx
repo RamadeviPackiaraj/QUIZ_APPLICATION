@@ -8,7 +8,7 @@ export default async function StudentDashboard() {
   const result = results[1];
 
   return (
-    <AppShell role="student" title="Candidate Dashboard" subtitle="Choose a quiz, search assigned assessments, and start quickly.">
+    <AppShell role="student" title="Candidate Dashboard" subtitle="Quiz access and score summary.">
       <StudentDashboardClient quizzes={quizzes} result={result} />
     </AppShell>
   );

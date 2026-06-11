@@ -6,7 +6,7 @@ export default async function StudentQuizPage() {
   const { quiz, questions } = await quizService.activeQuiz();
 
   return (
-    <AppShell role="student" title="Quiz Attempt" subtitle="Answer questions, track time, and review your progress before submitting.">
+    <AppShell role="student" title="Attend Quiz" subtitle="Answer questions, track time, mark review items, and submit confidently.">
       <QuizRunner quiz={quiz} questions={questions} />
     </AppShell>
   );

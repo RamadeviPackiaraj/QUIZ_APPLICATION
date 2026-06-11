@@ -9,7 +9,7 @@ export default async function StudentsPage() {
     <AppShell
       role="admin"
       title="Candidates"
-      subtitle="Manage candidate approvals and examination access."
+      subtitle="CSV upload, manual entry, approvals."
     >
       <StudentTable students={students} />
     </AppShell>

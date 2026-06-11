@@ -6,7 +6,7 @@ export default async function QuizzesPage() {
   const quizzes = await quizService.list();
 
   return (
-    <AppShell title="Quiz Management" subtitle="Choose, search, configure, and publish assessments from one compact workspace.">
+    <AppShell title="Quiz Settings" subtitle="Configure schedule, passing score, shuffle behavior, and quiz availability.">
       <QuizManagementClient quizzes={quizzes} />
     </AppShell>
   );

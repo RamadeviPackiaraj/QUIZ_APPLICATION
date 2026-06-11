@@ -10,67 +10,42 @@ import { Footer } from "@/components/layout/Footer";
 
 export function LandingPage() {
   return (
-    <main className="flex min-h-screen flex-col bg-slate-50">
+    <main className="soft-grid flex min-h-screen flex-col bg-slate-50">
       <Navbar />
 
       <section className="relative flex-1 overflow-hidden">
-        {/* Background Glow */}
-        <div className="absolute left-1/2 top-20 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-blue-500/10 blur-[150px]" />
-
         <div className="mx-auto max-w-7xl px-6 py-12">
           <div className="grid items-center gap-12 lg:grid-cols-2">
 
-            {/* LEFT SIDE */}
             <MotionBlock>
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-medium text-blue-700">
+              <div className="mono-chip">
                 <ShieldCheck size={14} />
                 Secure Assessment Platform
               </div>
 
-              <h1 className="mt-6 text-5xl font-extrabold leading-[0.95] tracking-tight text-slate-900 lg:text-7xl">
-                Create.
+              <h1 className="mt-6 text-5xl font-black leading-[0.95] tracking-tight text-slate-950 lg:text-7xl">
+                Quiz SaaS
                 <br />
-                Assess.
+                for modern
                 <br />
-                <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  Analyze.
-                </span>
+                assessments.
               </h1>
 
               <p className="mt-6 max-w-md text-lg leading-8 text-slate-600">
-                Everything you need to create, manage and analyze assessments.
+                Create quizzes, approve candidates, run exams, and publish scoreboards.
               </p>
 
               <Link
                 href="/login"
-                className="
-                  mt-8
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-2xl
-                  bg-gradient-to-r
-                  from-blue-600
-                  to-indigo-600
-                  px-7
-                  py-4
-                  text-sm
-                  font-semibold
-                  text-white
-                  shadow-xl
-                  transition-all
-                  hover:-translate-y-1
-                "
+                className="btn-primary mt-8 px-7 py-4"
               >
                 Get Started
                 <ArrowRight size={18} />
               </Link>
             </MotionBlock>
 
-            {/* RIGHT SIDE */}
             <div className="relative h-[550px] w-full">
 
-              {/* Main Dashboard */}
               <MotionBlock delay={0.1}>
                 <div
                   className="
@@ -82,7 +57,7 @@ export function LandingPage() {
                     -translate-x-1/2
                     -translate-y-1/2
                     overflow-hidden
-                    rounded-[40px]
+                    rounded-[28px]
                     border
                     border-slate-200
                     bg-white
@@ -98,7 +73,6 @@ export function LandingPage() {
                 </div>
               </MotionBlock>
 
-              {/* Assessment Card */}
               <MotionBlock delay={0.2}>
                 <div
                   className="
@@ -107,7 +81,7 @@ export function LandingPage() {
                     top-48
                     z-20
                     w-56
-                    rounded-[28px]
+                    rounded-[20px]
                     bg-white
                     p-3
                     shadow-xl
@@ -123,7 +97,7 @@ export function LandingPage() {
                     />
                   </div>
 
-                  <h3 className="mt-3 text-lg font-semibold text-slate-900">
+                  <h3 className="mt-3 text-lg font-black text-slate-950">
                     Assessments
                   </h3>
 
@@ -133,7 +107,6 @@ export function LandingPage() {
                 </div>
               </MotionBlock>
 
-              {/* Candidate Card */}
               <MotionBlock delay={0.3}>
                 <div
                   className="
@@ -142,7 +115,7 @@ export function LandingPage() {
                     top-10
                     z-20
                     w-56
-                    rounded-[28px]
+                    rounded-[20px]
                     bg-white
                     p-3
                     shadow-xl
@@ -158,7 +131,7 @@ export function LandingPage() {
                     />
                   </div>
 
-                  <h3 className="mt-3 text-lg font-semibold text-slate-900">
+                  <h3 className="mt-3 text-lg font-black text-slate-950">
                     Candidates
                   </h3>
 
@@ -168,7 +141,6 @@ export function LandingPage() {
                 </div>
               </MotionBlock>
 
-              {/* Result Card */}
               <MotionBlock delay={0.4}>
                 <div
                   className="
@@ -177,10 +149,8 @@ export function LandingPage() {
                     bottom-0
                     z-20
                     w-64
-                    rounded-[28px]
-                    bg-gradient-to-r
-                    from-blue-600
-                    to-indigo-600
+                    rounded-[20px]
+                    bg-slate-950
                     p-4
                     text-white
                     shadow-2xl

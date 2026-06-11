@@ -12,6 +12,8 @@ import {
   Plus,
   Save,
   Search,
+  ShieldCheck,
+  Ban,
   Trash2,
   UploadCloud,
   X,
@@ -235,12 +237,21 @@ export default function OrganizationsPage() {
     });
   };
 
+  const handleStatusToggle = (id: string) => {
+    setOrganizations((current) =>
+      current.map((org) =>
+        org.id === id
+          ? {
+              ...org,
+              status: org.status === "active" ? "inactive" : "active",
+            }
+          : org
+      )
+    );
+  };
+
   const handleDelete = (id: string) => {
     setOrganizations((current) => current.filter((org) => org.id !== id));
-
-    if (editingId === id) {
-      closeEditor();
-    }
   };
 
   const parseCsv = (text: string) => {
@@ -319,12 +330,12 @@ export default function OrganizationsPage() {
     <AppShell
       role="super-admin"
       title="Organizations"
-      subtitle="Upload CSV data or manually maintain tenant admin credentials."
+      subtitle="Tenant access and status."
     >
-      <section className="surface rounded-2xl p-6">
+      <section className="surface-live rounded-2xl p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-950">
+            <h2 className="text-lg font-extrabold tracking-tight text-slate-950">
               Tenant Directory
             </h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -410,9 +421,9 @@ export default function OrganizationsPage() {
               <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto_auto] lg:items-end">
                 <label
                   htmlFor="organization-csv"
-                  className="flex min-h-28 cursor-pointer flex-col justify-center rounded-xl border border-dashed border-blue-200 bg-blue-50 px-5 text-center transition hover:border-blue-400 hover:bg-blue-100"
+                  className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border border-dashed border-[#1E3A8A]/25 bg-[#1E3A8A]/5 px-5 text-center transition hover:border-[#1E3A8A]/50 hover:bg-[#1E3A8A]/10"
                 >
-                  <FileUp className="mx-auto text-blue-700" size={26} />
+                  <FileUp className="mx-auto text-[#1E3A8A]" size={24} />
                   <span className="mt-2 text-sm font-bold text-slate-950">
                     {csvFile ? csvFile.name : "Choose CSV file"}
                   </span>
@@ -567,7 +578,7 @@ export default function OrganizationsPage() {
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-bold ${
                         org.status === "active"
-                          ? "bg-green-100 text-green-700"
+                          ? "bg-emerald-100 text-emerald-700"
                           : "bg-red-100 text-red-700"
                       }`}
                     >
@@ -576,22 +587,34 @@ export default function OrganizationsPage() {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(org)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                    >
-                      <Pencil size={14} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(org.id)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100"
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(org)}
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Pencil size={14} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(org.id)}
+                        className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold ${
+                          org.status === "active"
+                            ? "border-red-100 bg-red-50 text-red-700 hover:bg-red-100"
+                          : "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        }`}
+                      >
+                        {org.status === "active" ? <Ban size={14} /> : <ShieldCheck size={14} />}
+                        {org.status === "active" ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(org.id)}
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>

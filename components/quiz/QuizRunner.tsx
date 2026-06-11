@@ -33,7 +33,7 @@ function TopTimer({ label, value, percent, warning = false }: { label: string; v
         <span className={warning ? "text-amber-700" : "text-slate-900"}>{value}</span>
       </div>
       <div className="mt-2 h-1.5 rounded-full bg-slate-200">
-        <div className={cn("h-1.5 rounded-full", warning ? "bg-amber-500" : "bg-blue-700")} style={{ width: `${percent}%` }} />
+        <div className={cn("h-1.5 rounded-full", warning ? "bg-amber-500" : "bg-slate-950")} style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -55,6 +55,18 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
   useEffect(() => {
     setVisited((state) => ({ ...state, [question.id]: true }));
   }, [question.id]);
+
+  useEffect(() => {
+    const requestOnFirstClick = () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => undefined);
+      }
+      window.removeEventListener("click", requestOnFirstClick);
+    };
+
+    window.addEventListener("click", requestOnFirstClick, { once: true });
+    return () => window.removeEventListener("click", requestOnFirstClick);
+  }, []);
 
   useEffect(() => {
     const warn = () => {
@@ -107,7 +119,7 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
 
   if (submitted) {
     return (
-      <section className="surface rounded-2xl p-8 text-center">
+      <section className="surface-live rounded-[24px] p-8 text-center">
         <CheckCircle2 className="mx-auto text-[#22C55E]" size={52} />
         <h2 className="mt-4 text-2xl font-extrabold text-[#111827]">Quiz submitted</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[#64748B]">Your attempt has been submitted. Your scorecard is ready to review.</p>
@@ -116,11 +128,11 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
   }
 
   return (
-    <section className="no-select grid gap-4 xl:grid-cols-[230px_minmax(0,1fr)_280px]">
-      <div className="surface sticky top-20 z-20 rounded-lg p-3 xl:col-span-3">
+    <section className="no-select grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="surface-live sticky top-16 z-20 rounded-2xl p-3 xl:col-span-2">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase text-blue-700">Candidate quiz</p>
+            <p className="text-xs font-bold uppercase text-slate-500">Candidate quiz</p>
             <h2 className="text-lg font-black text-slate-900">{quiz.title}</h2>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -129,19 +141,29 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
           </div>
         </div>
       </div>
-      <aside className="surface rounded-2xl p-4">
-        <p className="text-sm font-extrabold text-[#111827]">Sections</p>
-        <div className="mt-4 grid gap-3">
+
+      <article className="surface-live rounded-2xl p-4">
+        <div className="border-b border-slate-200 pb-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-extrabold text-slate-950">Sections</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Select a section to jump to its questions.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+              {activeSection} / Q{active + 1}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
           {sections.map((section) => {
             const stats = sectionStats(section);
             const firstIndex = questions.findIndex((item) => item.section === section);
             return (
-              <button key={section} onClick={() => setActive(firstIndex)} className={cn("rounded-xl border p-3 text-left transition", section === activeSection ? "border-[#1E3A8A] bg-[#DBEAFE]" : "border-[#E2E8F0] bg-[#F8FAFC] hover:bg-[#EFF6FF]")}>
+              <button key={section} onClick={() => setActive(firstIndex)} className={cn("rounded-xl border p-3 text-left transition", section === activeSection ? "border-slate-950 bg-slate-950 text-white" : "border-[#E2E8F0] bg-[#F8FAFC] hover:bg-white")}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-extrabold text-[#172554]">{section}</span>
-                  <span className="text-xs font-bold text-[#3B82F6]">{sectionMeta[section]}</span>
+                  <span className={cn("text-sm font-extrabold", section === activeSection ? "text-white" : "text-slate-950")}>{section}</span>
+                  <span className={cn("text-xs font-bold", section === activeSection ? "text-slate-300" : "text-slate-500")}>{sectionMeta[section]}</span>
                 </div>
-                <div className="mt-3 grid grid-cols-4 gap-1 text-center text-[11px] font-bold text-[#64748B]">
+                <div className={cn("mt-3 grid grid-cols-4 gap-1 text-center text-[11px] font-bold", section === activeSection ? "text-slate-300" : "text-[#64748B]")}>
                   <span>{stats.total} Total</span>
                   <span>{stats.answered} Ans</span>
                   <span>{stats.pending} Pend</span>
@@ -150,43 +172,53 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
               </button>
             );
           })}
+          </div>
         </div>
-      </aside>
 
-      <article className="surface rounded-2xl p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] pb-4">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] pb-4">
           <div>
-            <p className="text-sm font-bold text-[#3B82F6]">{activeSection}</p>
+            <p className="text-sm font-bold text-slate-500">{activeSection}</p>
             <h2 className="mt-1 text-xl font-extrabold text-[#111827]">{activeSection} - Question {active + 1}</h2>
           </div>
-          <span className="rounded-full bg-[#DBEAFE] px-3 py-1 text-xs font-bold text-[#1E3A8A]">{question.difficulty} / {question.marks} marks</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{question.difficulty} / {question.marks} marks</span>
         </div>
         <p className="mt-6 text-lg font-semibold leading-8 text-[#111827]">{question.prompt}</p>
-        <div className="mt-6 grid gap-3">
-          {question.options.map((option) => {
-            const current = answers[question.id];
-            const checked = Array.isArray(current) ? current.includes(option) : current === option;
-            return (
-              <label key={option} className={cn("flex cursor-pointer items-center gap-3 rounded-xl border p-4 text-sm font-semibold transition", checked ? "border-[#1E3A8A] bg-[#DBEAFE] text-[#172554]" : "border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] hover:border-[#3B82F6]")}>
-                <input
-                  type={question.type === "Multiple Choice" || question.type === "Checklist" ? "checkbox" : "radio"}
-                  name={question.id}
-                  checked={checked}
-                  onChange={() => {
-                    if (question.type === "Multiple Choice" || question.type === "Checklist") {
-                      const list = Array.isArray(current) ? current : [];
-                      setAnswer(question.id, checked ? list.filter((item) => item !== option) : [...list, option]);
-                    } else {
-                      setAnswer(question.id, option);
-                    }
-                  }}
-                  className="h-4 w-4 accent-[#1E3A8A]"
-                />
-                {option}
-              </label>
-            );
-          })}
-        </div>
+        {question.type === "Fill Blank" ? (
+          <div className="mt-6">
+            <input
+              value={(answers[question.id] as string) ?? ""}
+              onChange={(event) => setAnswer(question.id, event.target.value)}
+              className="input-soft w-full px-4 py-4 text-base font-semibold"
+              placeholder="Type your answer"
+            />
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-3">
+            {question.options.map((option) => {
+              const current = answers[question.id];
+              const checked = Array.isArray(current) ? current.includes(option) : current === option;
+              return (
+                <label key={option} className={cn("flex cursor-pointer items-center gap-3 rounded-xl border p-4 text-sm font-semibold transition", checked ? "border-slate-950 bg-slate-100 text-slate-950" : "border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] hover:border-slate-950")}>
+                  <input
+                    type={question.type === "Multiple Choice" || question.type === "Checklist" ? "checkbox" : "radio"}
+                    name={question.id}
+                    checked={checked}
+                    onChange={() => {
+                      if (question.type === "Multiple Choice" || question.type === "Checklist") {
+                        const list = Array.isArray(current) ? current : [];
+                        setAnswer(question.id, checked ? list.filter((item) => item !== option) : [...list, option]);
+                      } else {
+                        setAnswer(question.id, option);
+                      }
+                    }}
+                    className="h-4 w-4 accent-slate-950"
+                  />
+                  {option}
+                </label>
+              );
+            })}
+          </div>
+        )}
         <div className="mt-6 flex flex-wrap justify-between gap-3">
           <button onClick={() => setActive(Math.max(active - 1, 0))} className="btn-secondary">Previous</button>
           <div className="flex flex-wrap gap-2">
@@ -218,11 +250,11 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
       </article>
 
       <aside className="grid gap-4">
-        <div className="surface rounded-2xl p-4">
+        <div className="surface-live rounded-[24px] p-4">
           <p className="text-sm font-extrabold text-[#111827]">Question Palette</p>
           <div className="mt-4 grid grid-cols-5 gap-2">
             {questions.map((item, index) => (
-              <button key={item.id} onClick={() => setActive(index)} className={cn("h-10 rounded-lg text-sm font-extrabold shadow-sm", paletteStyles[getStatus(item)], index === active && "ring-2 ring-[#172554] ring-offset-2")}>
+              <button key={item.id} onClick={() => setActive(index)} className={cn("h-10 rounded-lg text-sm font-extrabold shadow-sm", paletteStyles[getStatus(item)], index === active && "ring-2 ring-slate-950 ring-offset-2")}>
                 {index + 1}
               </button>
             ))}
@@ -237,7 +269,7 @@ export function QuizRunner({ quiz, questions }: { quiz: Quiz; questions: Questio
           <div className="flex items-center gap-2 text-sm font-extrabold text-[#111827]">
             <AlertTriangle size={17} /> Security Warnings
           </div>
-          <p className="mt-3 text-3xl font-extrabold text-[#172554]">{warnings}/3</p>
+          <p className="mt-3 text-3xl font-extrabold text-slate-950">{warnings}/3</p>
           <div className="mt-3 grid gap-2 text-xs font-semibold text-[#64748B]">
             <span className="flex items-center gap-2"><Maximize2 size={14} /> Fullscreen mode indicator</span>
             <span className="flex items-center gap-2"><ShieldCheck size={14} /> Shortcut, copy, paste, right click disabled UI</span>

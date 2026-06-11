@@ -22,7 +22,7 @@ export default async function AdminDashboard() {
     <AppShell
       role="admin"
       title="Dashboard"
-      subtitle="Simple overview of candidates, questions, quizzes and approvals."
+      subtitle="Candidates, questions, quizzes."
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard

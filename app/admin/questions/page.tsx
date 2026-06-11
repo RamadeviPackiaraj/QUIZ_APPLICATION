@@ -6,7 +6,7 @@ export default async function QuestionsPage() {
   const questions = await questionService.list();
 
   return (
-    <AppShell title="Question Bank" subtitle="Build project questions by type with options, marks, answers, and quick search.">
+    <AppShell title="Questions" subtitle="Manual or CSV question setup.">
       <QuestionBankClient questions={questions} />
     </AppShell>
   );

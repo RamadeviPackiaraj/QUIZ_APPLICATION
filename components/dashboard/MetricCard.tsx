@@ -20,31 +20,29 @@ export function MetricCard({
           group
           relative
           overflow-hidden
-          rounded-[28px]
+          rounded-[24px]
           border
-          border-slate-200/80
-          bg-white
+          border-slate-200/90
+          bg-white/95
           p-6
           shadow-sm
           transition-all
           duration-300
           hover:-translate-y-1
           hover:shadow-xl
-          hover:shadow-blue-100
+          hover:shadow-slate-200
         "
       >
         {/* Background Glow */}
-        <div
-          className="absolute right-0 top-0 h-32 w-32 rounded-full bg-blue-50 blur-3xl opacity-60 transition-all duration-500 group-hover:scale-125"
-        />
+        <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-slate-100 blur-3xl opacity-70 transition-all duration-500 group-hover:scale-125" />
 
         <div className="relative z-10 flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium tracking-wide text-slate-500">
+            <p className="text-sm font-bold tracking-wide text-slate-500">
               {label}
             </p>
 
-            <h3 className="mt-3 text-4xl font-black tracking-tight text-slate-900">
+            <h3 className="mt-3 text-4xl font-black tracking-tight text-slate-950">
               {value}
             </h3>
 
@@ -61,11 +59,11 @@ export function MetricCard({
               w-14
               items-center
               justify-center
-              rounded-2xl
-              bg-[#1E3A8A]
+              rounded-xl
+              bg-slate-950
               text-white
               shadow-lg
-              shadow-blue-500/20
+              shadow-slate-300/40
               transition-transform
               duration-300
               group-hover:scale-110
@@ -84,7 +82,7 @@ export function MetricCard({
                 h-full
                 w-3/4
                 rounded-full
-                bg-[#1E3A8A]
+                bg-slate-950
               "
             />
           </div>

@@ -3,8 +3,9 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Ban,
   Building2,
-  Users,
+  CheckCircle2,
   UserPlus,
 } from "lucide-react";
 
@@ -27,25 +28,32 @@ export default function SuperAdminDashboard() {
     <AppShell
       role="super-admin"
       title="Dashboard"
-      subtitle="Simple overview of organizations and admin access."
+      subtitle="Simple overview of organization status and candidate reach."
     >
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Organizations"
+          label="Total Organizations"
           value={organizations.length.toString()}
-          delta={`${organizations.filter((org) => org.status === "active").length} active tenants`}
+          delta="Tenant directory"
           icon={Building2}
         />
 
         <MetricCard
-          label="Tenant Admins"
-          value={organizations.reduce((total, org) => total + org.admins, 0).toString()}
-          delta="Across organizations"
-          icon={Users}
+          label="Active Organizations"
+          value={organizations.filter((org) => org.status === "active").length.toString()}
+          delta="Can run assessments"
+          icon={CheckCircle2}
         />
 
         <MetricCard
-          label="Candidates"
+          label="Inactive Organizations"
+          value={organizations.filter((org) => org.status === "inactive").length.toString()}
+          delta="Closed or paused"
+          icon={Ban}
+        />
+
+        <MetricCard
+          label="Total Candidates"
           value={organizations
             .reduce((total, org) => total + org.candidates, 0)
             .toLocaleString()}

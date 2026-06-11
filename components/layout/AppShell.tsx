@@ -81,7 +81,7 @@ export function AppShell({
   children: React.ReactNode;
   role?: "super-admin" | "admin" | "student";
   title: string;
-  subtitle: string;
+  subtitle?: string;
 }) {
   const nav =
     role === "super-admin"
@@ -93,34 +93,36 @@ export function AppShell({
     role === "super-admin" ? "Super Admin" : role === "admin" ? "Admin" : "Candidate";
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
+    <div className="soft-grid flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <Navbar
         links={nav.map((item) => ({ href: item.href, label: item.label }))}
         actionLabel={role === "super-admin" ? "Logout" : "Switch Role"}
         actionHref="/login"
       />
 
-      <main className="flex-1 px-4 py-6">
+      <main className="flex-1 px-4 py-4">
         <div className="mx-auto max-w-7xl">
-          <MotionBlock className="mb-5 border-b border-slate-200 pb-5" delay={0.05}>
+          <MotionBlock className="mb-4 border-b border-slate-200/80 pb-3" delay={0.05}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                  <span className="mono-chip">
                     {roleLabel}
                   </span>
-                  <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
                     Active
                   </span>
                 </div>
 
-                <h1 className="text-3xl font-black text-slate-900 md:text-4xl">
+                <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-[28px]">
                   {title}
                 </h1>
 
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 md:text-base">
-                  {subtitle}
-                </p>
+                {subtitle ? (
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                    {subtitle}
+                  </p>
+                ) : null}
               </div>
 
               <nav className="flex flex-wrap gap-2 md:hidden">
