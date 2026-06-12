@@ -1,638 +1,469 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronsUpDown,
-  Download,
-  FileUp,
-  Pencil,
-  Plus,
-  Save,
-  Search,
-  ShieldCheck,
-  Ban,
-  Trash2,
-  UploadCloud,
-  X,
-} from "lucide-react";
+import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, Ban, ChevronsUpDown, Clipboard, Download, Eye, EyeOff, FileText, FileUp, KeyRound, MoreHorizontal, Pencil, Plus, Search, ShieldCheck, UploadCloud, X } from "lucide-react";
 
 import { AppShell } from "@/components/layout/AppShell";
-import { organizations as mockOrganizations } from "@/mock/organizations";
-
-type Organization = (typeof mockOrganizations)[number];
-type Status = Organization["status"];
-type SortKey =
-  | "name"
-  | "adminUserId"
-  | "adminPassword"
-  | "admins"
-  | "candidates"
-  | "quizzes"
-  | "status";
-type SortDirection = "asc" | "desc";
-type EntryMode = "csv" | "manual" | null;
+import { useToast } from "@/components/ui/Toast";
+import { userSeed } from "@/mock/users";
+import { buildErrorReport, ImportSummary, validateAdminCsv } from "@/lib/importValidation";
+import { downloadCsv, printRows } from "@/lib/downloads";
+import { createManagedUser, generateTemporaryPassword, hashPassword } from "@/lib/userManagement";
+import type { ManagedUser } from "@/types";
 
 const emptyForm = {
   name: "",
-  adminUserId: "",
-  adminPassword: "",
-  admins: "1",
-  candidates: "0",
-  quizzes: "0",
-  status: "active" as Status,
+  email: "",
 };
 
-function credentialsFromName(name: string) {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+type SortKey = "displayId" | "name" | "email" | "status" | "createdDate";
+type SortDirection = "asc" | "desc";
 
-  const prefix = slug.slice(0, 5).toUpperCase() || "ADMIN";
+function StatCard({
+  label,
+  value,
+  tone = "navy",
+}: {
+  label: string;
+  value: number;
+  tone?: "navy" | "green" | "red" | "gray";
+}) {
+  const toneClass = {
+    navy: "bg-[#0F172A] text-white",
+    green: "bg-emerald-50 text-emerald-700",
+    red: "bg-red-50 text-red-700",
+    gray: "bg-slate-50 text-slate-600",
+  }[tone];
 
-  return {
-    adminUserId: `${slug || "organization"}-admin`,
-    adminPassword: `${prefix}@2026`,
-  };
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <p className="text-2xl font-black tracking-tight text-slate-950">{value}</p>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${toneClass}`}>{label}</span>
+      </div>
+    </div>
+  );
 }
 
 export default function OrganizationsPage() {
-  const router = useRouter();
-  const [organizations, setOrganizations] =
-    useState<Organization[]>(mockOrganizations);
+  const { showToast } = useToast();
+  const [admins, setAdmins] = useState<ManagedUser[]>(userSeed.admins);
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [entryMode, setEntryMode] = useState<EntryMode>(null);
-  const [showOptions, setShowOptions] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [showForm, setShowForm] = useState(false);
+  const [entryMode, setEntryMode] = useState<"manual" | "csv">("manual");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [importSummary, setImportSummary] = useState<ImportSummary<{ name: string; email: string }> | null>(null);
+  const [visiblePasswords, setVisiblePasswords] = useState<string[]>([]);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("displayId");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [form, setForm] = useState(emptyForm);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
 
-  useEffect(() => {
-    const access = localStorage.getItem("superAdminAccess");
+  const filteredAdmins = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
 
-    if (!access) {
-      router.push("/super-admin/organizations");
-    }
-  }, [router]);
-
-  const filteredOrganizations = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return organizations
-      .filter((org) =>
-        [
-          org.name,
-          org.adminUserId,
-          org.adminPassword,
-          org.status,
-          org.admins.toString(),
-          org.candidates.toString(),
-          org.quizzes.toString(),
-        ]
-          .join(" ")
+    return admins
+      .filter((admin) => {
+        const matchesStatus = statusFilter === "all" || admin.status === statusFilter;
+        const matchesQuery = `${admin.displayId} ${admin.name} ${admin.email} ${admin.status}`
           .toLowerCase()
-          .includes(normalizedQuery)
-      )
+          .includes(normalized);
+        return matchesStatus && matchesQuery;
+      })
       .sort((first, second) => {
-        const firstValue = first[sortKey];
-        const secondValue = second[sortKey];
-
-        if (typeof firstValue === "number" && typeof secondValue === "number") {
-          return sortDirection === "asc"
-            ? firstValue - secondValue
-            : secondValue - firstValue;
-        }
-
-        const firstText = String(firstValue).toLowerCase();
-        const secondText = String(secondValue).toLowerCase();
-
-        return sortDirection === "asc"
-          ? firstText.localeCompare(secondText)
-          : secondText.localeCompare(firstText);
+        const firstText = String(first[sortKey]).toLowerCase();
+        const secondText = String(second[sortKey]).toLowerCase();
+        return sortDirection === "asc" ? firstText.localeCompare(secondText) : secondText.localeCompare(firstText);
       });
-  }, [organizations, query, sortDirection, sortKey]);
+  }, [admins, query, sortDirection, sortKey, statusFilter]);
 
-  const totals = useMemo(
-    () => ({
-      admins: organizations.reduce((total, org) => total + org.admins, 0),
-      candidates: organizations.reduce(
-        (total, org) => total + org.candidates,
-        0
-      ),
-    }),
-    [organizations]
-  );
+  const exportRows = filteredAdmins.map((admin) => ({
+    "Admin ID": admin.displayId,
+    "Admin Name": admin.name,
+    Email: admin.email,
+    "Temporary Password": admin.temporaryPassword || "",
+    Status: admin.status,
+    "Created Date": admin.createdDate,
+  }));
+  const activeCount = admins.filter((admin) => admin.status === "active").length;
+  const inactiveCount = admins.filter((admin) => admin.status === "inactive").length;
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
       return;
     }
-
     setSortKey(key);
     setSortDirection("asc");
   };
 
-  const renderSortIcon = (key: SortKey) => {
-    if (sortKey !== key) {
-      return <ChevronsUpDown size={14} />;
-    }
-
-    return sortDirection === "asc" ? (
-      <ArrowUp size={14} />
-    ) : (
-      <ArrowDown size={14} />
-    );
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ChevronsUpDown size={13} />;
+    return sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />;
   };
 
-  const openMode = (mode: EntryMode) => {
-    setEntryMode(mode);
-    setShowOptions(false);
+  const closeForm = () => {
+    setShowForm(false);
+    setEntryMode("manual");
     setEditingId(null);
+    setCsvFileName("");
+    setUploadProgress(0);
     setForm(emptyForm);
   };
 
-  const closeEditor = () => {
-    setEntryMode(null);
-    setEditingId(null);
-    setCsvFile(null);
-    setForm(emptyForm);
-  };
-
-  const handleNameChange = (name: string) => {
-    const credentials = credentialsFromName(name);
-
-    setForm((current) => ({
-      ...current,
-      name,
-      adminUserId: editingId ? current.adminUserId : credentials.adminUserId,
-      adminPassword: editingId ? current.adminPassword : credentials.adminPassword,
-    }));
-  };
-
-  const handleManualSave = (event: FormEvent<HTMLFormElement>) => {
+  const handleSave = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
 
-    const trimmedName = form.name.trim();
+    if (!name || !email) return;
 
-    if (!trimmedName) {
+    if (admins.some((admin) => admin.email === email && admin.id !== editingId)) {
+      showToast({ tone: "info", title: "Duplicate admin email", message: "An admin with this email already exists." });
       return;
     }
-
-    const payload = {
-      name: trimmedName,
-      adminUserId:
-        form.adminUserId.trim() || credentialsFromName(trimmedName).adminUserId,
-      adminPassword:
-        form.adminPassword.trim() ||
-        credentialsFromName(trimmedName).adminPassword,
-      admins: Number(form.admins) || 0,
-      candidates: Number(form.candidates) || 0,
-      quizzes: Number(form.quizzes) || 0,
-      status: form.status,
-    };
 
     if (editingId) {
-      setOrganizations((current) =>
-        current.map((org) =>
-          org.id === editingId
-            ? {
-                ...org,
-                ...payload,
-              }
-            : org
-        )
+      setAdmins((current) =>
+        current.map((admin) => (admin.id === editingId ? { ...admin, name, email } : admin))
       );
+      showToast({ tone: "success", title: "Admin updated" });
     } else {
-      setOrganizations((current) => [
-        ...current,
-        {
-          id: `org-${Date.now()}`,
-          ...payload,
-        },
-      ]);
+      const admin = createManagedUser({
+        name,
+        email,
+        role: "ADMIN",
+        existingUsers: admins,
+      });
+      setAdmins((current) => [admin, ...current]);
+      showToast({ tone: "success", title: "Admin created", message: `${admin.displayId} is active. Credentials were emailed.` });
     }
 
-    closeEditor();
+    closeForm();
   };
 
-  const handleEdit = (org: Organization) => {
+  const editAdmin = (admin: ManagedUser) => {
+    setEditingId(admin.id);
+    setActionMenuId(null);
     setEntryMode("manual");
-    setShowOptions(false);
-    setEditingId(org.id);
-    setForm({
-      name: org.name,
-      adminUserId: org.adminUserId,
-      adminPassword: org.adminPassword,
-      admins: org.admins.toString(),
-      candidates: org.candidates.toString(),
-      quizzes: org.quizzes.toString(),
-      status: org.status,
-    });
+    setShowForm(true);
+    setForm({ name: admin.name, email: admin.email });
   };
 
-  const handleStatusToggle = (id: string) => {
-    setOrganizations((current) =>
-      current.map((org) =>
-        org.id === id
-          ? {
-              ...org,
-              status: org.status === "active" ? "inactive" : "active",
-            }
-          : org
+  const openEntry = (mode: "manual" | "csv") => {
+    setEntryMode(mode);
+    setEditingId(null);
+    setShowForm(true);
+    setForm(emptyForm);
+  };
+
+  const handleCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setCsvFileName(file.name);
+    setUploadProgress(32);
+    const summary = validateAdminCsv(await file.text(), admins);
+    const imported = summary.validRows.map((row, index) =>
+      createManagedUser({
+        name: row.name,
+        email: row.email,
+        role: "ADMIN",
+        existingUsers: [...admins, ...summary.validRows.slice(0, index).map((item, itemIndex) => ({
+          id: `preview-${itemIndex}`,
+          displayId: `ADM-${String(admins.length + itemIndex + 1).padStart(4, "0")}`,
+          name: item.name,
+          email: item.email,
+          role: "ADMIN" as const,
+          passwordHash: "",
+          status: "active" as const,
+          createdDate: "",
+          isFirstLogin: true,
+        }))],
+      })
+    );
+
+    setAdmins((current) => [...imported, ...current]);
+    setImportSummary(summary);
+    setUploadProgress(100);
+    showToast({ tone: "success", title: "Import completed", message: `${summary.validRecords} admins imported.` });
+  };
+
+  const toggleStatus = (id: string) => {
+    setAdmins((current) =>
+      current.map((admin) =>
+        admin.id === id ? { ...admin, status: admin.status === "active" ? "inactive" : "active" } : admin
       )
+    );
+    setConfirmId(null);
+    setActionMenuId(null);
+    showToast({ tone: "success", title: "Status updated" });
+  };
+
+  const resetPassword = (id: string) => {
+    const temporaryPassword = generateTemporaryPassword();
+    setAdmins((current) =>
+      current.map((admin) =>
+        admin.id === id
+          ? { ...admin, temporaryPassword, passwordHash: hashPassword(temporaryPassword), isFirstLogin: true }
+          : admin
+      )
+    );
+    console.info("[EMAIL]", "Admin reset password credentials sent", { id, temporaryPassword });
+    showToast({ tone: "success", title: "Password reset", message: "Temporary credentials were emailed." });
+    setActionMenuId(null);
+  };
+
+  const togglePassword = (id: string) => {
+    setVisiblePasswords((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     );
   };
 
-  const handleDelete = (id: string) => {
-    setOrganizations((current) => current.filter((org) => org.id !== id));
+  const copyPassword = async (admin: ManagedUser) => {
+    if (!admin.temporaryPassword) return;
+    await navigator.clipboard.writeText(admin.temporaryPassword);
+    showToast({ tone: "success", title: "Password copied", message: `${admin.displayId} temporary password copied.` });
   };
 
-  const parseCsv = (text: string) => {
-    const [headerLine, ...rows] = text
-      .split(/\r?\n/)
-      .map((row) => row.trim())
-      .filter(Boolean);
-
-    if (!headerLine) {
-      return [];
-    }
-
-    const headers = headerLine.split(",").map((header) => header.trim());
-
-    return rows.map((row, index) => {
-      const values = row.split(",").map((value) => value.trim());
-      const record = headers.reduce<Record<string, string>>(
-        (current, header, headerIndex) => ({
-          ...current,
-          [header]: values[headerIndex] ?? "",
-        }),
-        {}
-      );
-
-      const name =
-        record.name || record.organization || `Imported Organization ${index + 1}`;
-      const credentials = credentialsFromName(name);
-
-      return {
-        id: `org-csv-${Date.now()}-${index}`,
-        name,
-        adminUserId: record.adminUserId || credentials.adminUserId,
-        adminPassword: record.adminPassword || credentials.adminPassword,
-        admins: Number(record.admins) || 1,
-        candidates: Number(record.candidates) || 0,
-        quizzes: Number(record.quizzes) || 0,
-        status:
-          record.status?.toLowerCase() === "inactive"
-            ? "inactive"
-            : ("active" as Status),
-      };
-    });
-  };
-
-  const handleCsvUpload = async () => {
-    if (!csvFile) {
-      return;
-    }
-
-    const importedOrganizations = parseCsv(await csvFile.text());
-
-    if (importedOrganizations.length) {
-      setOrganizations((current) => [...current, ...importedOrganizations]);
-      closeEditor();
-    }
-  };
-
-  const handleSampleDownload = () => {
-    const csv =
-      "name,adminUserId,adminPassword,admins,candidates,quizzes,status\nDemo Academy,demo-admin,DEMO@2026,1,40,6,active";
+  const downloadErrors = () => {
+    if (!importSummary) return;
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    link.download = "organization-sample.csv";
+    link.href = URL.createObjectURL(new Blob([buildErrorReport(importSummary.issues)], { type: "text/plain" }));
+    link.download = "admin-import-errors.txt";
     link.click();
     URL.revokeObjectURL(link.href);
   };
 
-  const updateForm = (field: keyof typeof emptyForm, value: string) => {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  };
-
   return (
-    <AppShell
-      role="super-admin"
-      title="Organizations"
-      subtitle="Tenant access and status."
-    >
-      <section className="surface-live rounded-2xl p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-slate-950">
-              Tenant Directory
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {organizations.length} organizations, {totals.admins} admins,{" "}
-              {totals.candidates} candidates
-            </p>
-          </div>
+    <AppShell role="super-admin" title="Organization Admins" subtitle="Create and manage admin access with generated credentials.">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total" value={admins.length} />
+        <StatCard label="Active" value={activeCount} tone="green" />
+        <StatCard label="Inactive" value={inactiveCount} tone="red" />
+        <StatCard label="Pending" value={0} tone="gray" />
+      </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="flex h-11 min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 md:w-80">
-              <Search size={16} className="shrink-0 text-slate-400" />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search organizations"
-                className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
-              />
-            </label>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-slate-950">Admin Management</h2>
+              <p className="mt-1 text-sm text-slate-500">Search, export, and manage organization admin access.</p>
+            </div>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowOptions((current) => !current)}
-                className="btn-primary w-full sm:w-auto"
-              >
-                <Plus size={16} />
-                Upload / Add
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm transition focus-within:border-[#0F172A] focus-within:ring-4 focus-within:ring-slate-100 lg:w-80">
+                <Search size={16} className="text-slate-400" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search admins" className="w-full bg-transparent text-sm outline-none" />
+              </label>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-[#0F172A] focus:ring-4 focus:ring-slate-100">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <button type="button" onClick={() => downloadCsv("admins.csv", exportRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+                <Download size={16} />
+                CSV
               </button>
-
-              {showOptions ? (
-                <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                  <button
-                    type="button"
-                    onClick={() => openMode("csv")}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <UploadCloud size={16} />
-                    CSV Upload
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openMode("manual")}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Pencil size={16} />
-                    Manual Entry
-                  </button>
-                </div>
-              ) : null}
+              <button type="button" onClick={() => printRows("Admin Credentials", exportRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+                <FileText size={16} />
+                PDF
+              </button>
+              <button type="button" onClick={() => openEntry("manual")} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+                <Plus size={16} />
+                Add Admin
+              </button>
+              <button type="button" onClick={() => openEntry("csv")} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#111827]">
+                <UploadCloud size={16} />
+                Upload CSV
+              </button>
             </div>
           </div>
         </div>
 
-        {entryMode ? (
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <div className="flex items-center justify-between gap-3">
+        {showForm ? (
+          <div className="scale-in border-b border-slate-100 bg-slate-50 p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-950">
-                  {entryMode === "csv"
-                    ? "CSV Upload"
-                    : editingId
-                    ? "Edit Organization"
-                    : "Manual Entry"}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {entryMode === "csv"
-                    ? "Import rows and generate admin credentials from the uploaded data."
-                    : "Save tenant details and admin login credentials."}
-                </p>
+                <h3 className="font-bold text-slate-950">{entryMode === "csv" ? "CSV Upload" : editingId ? "Edit Admin" : "Manual Entry"}</h3>
+                <p className="mt-1 text-sm text-slate-500">Admin ID, password, status, and timestamps are generated automatically.</p>
               </div>
-              <button
-                type="button"
-                onClick={closeEditor}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                aria-label="Close form"
-              >
+              <button type="button" onClick={closeForm} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100" aria-label="Close form">
                 <X size={16} />
               </button>
             </div>
-
             {entryMode === "csv" ? (
-              <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto_auto] lg:items-end">
-                <label
-                  htmlFor="organization-csv"
-                  className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border border-dashed border-[#1E3A8A]/25 bg-[#1E3A8A]/5 px-5 text-center transition hover:border-[#1E3A8A]/50 hover:bg-[#1E3A8A]/10"
-                >
+              <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                <label className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border border-dashed border-[#1E3A8A]/25 bg-[#1E3A8A]/5 px-4 text-center transition hover:border-[#1E3A8A]/50 hover:bg-[#1E3A8A]/10">
                   <FileUp className="mx-auto text-[#1E3A8A]" size={24} />
-                  <span className="mt-2 text-sm font-bold text-slate-950">
-                    {csvFile ? csvFile.name : "Choose CSV file"}
-                  </span>
-                  <span className="mt-1 text-xs text-slate-500">
-                    name, adminUserId, adminPassword, admins, candidates,
-                    quizzes, status
-                  </span>
-                  <input
-                    id="organization-csv"
-                    type="file"
-                    accept=".csv"
-                    className="sr-only"
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      setCsvFile(event.target.files?.[0] ?? null)
-                    }
-                  />
+                  <span className="mt-2 text-sm font-bold text-slate-950">{csvFileName || "Choose admin CSV"}</span>
+                  <span className="mt-1 text-xs text-slate-500">Admin Name, Email Address</span>
+                  <input type="file" accept=".csv,text/csv" onChange={handleCsv} className="sr-only" />
                 </label>
-
-                <button
-                  type="button"
-                  onClick={handleCsvUpload}
-                  className="btn-primary"
-                >
-                  <UploadCloud size={16} />
-                  Upload CSV
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSampleDownload}
-                  className="btn-secondary"
-                >
-                  <Download size={16} />
-                  Sample
-                </button>
+                <div className="min-w-48">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full bg-slate-950 transition-all" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <p className="mt-2 text-xs font-bold text-slate-500">{uploadProgress}% uploaded</p>
+                </div>
               </div>
             ) : (
-              <form
-                onSubmit={handleManualSave}
-                className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-              >
-                <input
-                  className="input-soft px-4 py-3"
-                  value={form.name}
-                  onChange={(event) => handleNameChange(event.target.value)}
-                  placeholder="Organization name"
-                  type="text"
-                />
-                <input
-                  className="input-soft px-4 py-3"
-                  value={form.adminUserId}
-                  onChange={(event) =>
-                    updateForm("adminUserId", event.target.value)
-                  }
-                  placeholder="Admin user ID"
-                  type="text"
-                />
-                <input
-                  className="input-soft px-4 py-3"
-                  value={form.adminPassword}
-                  onChange={(event) =>
-                    updateForm("adminPassword", event.target.value)
-                  }
-                  placeholder="Admin password"
-                  type="text"
-                />
-                <input
-                  className="input-soft px-4 py-3"
-                  value={form.admins}
-                  onChange={(event) => updateForm("admins", event.target.value)}
-                  placeholder="Admins"
-                  type="number"
-                  min="0"
-                />
-                <input
-                  className="input-soft px-4 py-3"
-                  value={form.candidates}
-                  onChange={(event) =>
-                    updateForm("candidates", event.target.value)
-                  }
-                  placeholder="Candidates"
-                  type="number"
-                  min="0"
-                />
-                <input
-                  className="input-soft px-4 py-3"
-                  value={form.quizzes}
-                  onChange={(event) => updateForm("quizzes", event.target.value)}
-                  placeholder="Quizzes"
-                  type="number"
-                  min="0"
-                />
-                <select
-                  className="input-soft px-4 py-3"
-                  value={form.status}
-                  onChange={(event) =>
-                    updateForm("status", event.target.value as Status)
-                  }
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-                <button type="submit" className="btn-primary xl:col-span-2">
-                  <Save size={16} />
-                  {editingId ? "Update Organization" : "Save Organization"}
+              <form onSubmit={handleSave} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Admin Name" className="input-soft px-3 py-2.5 text-sm" required />
+                <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Admin Email" type="email" className="input-soft px-3 py-2.5 text-sm" required />
+                <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#111827]">
+                  <ShieldCheck size={16} />
+                  Save
                 </button>
               </form>
             )}
           </div>
         ) : null}
 
-        <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[1040px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1040px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/80">
                 {[
-                  ["name", "Organization"],
-                  ["adminUserId", "User ID"],
-                  ["adminPassword", "Password"],
-                  ["admins", "Admins"],
-                  ["candidates", "Candidates"],
-                  ["quizzes", "Quizzes"],
+                  ["displayId", "Admin ID"],
+                  ["name", "Admin Name"],
+                  ["email", "Email"],
                   ["status", "Status"],
+                  ["createdDate", "Created Date"],
                 ].map(([key, label]) => (
-                  <th key={key} className="px-4 py-3 font-bold">
-                    <button
-                      type="button"
-                      onClick={() => handleSort(key as SortKey)}
-                      className="inline-flex items-center gap-1 font-bold"
-                    >
+                  <th key={key} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <button type="button" onClick={() => handleSort(key as SortKey)} className="inline-flex items-center gap-1">
                       {label}
-                      {renderSortIcon(key as SortKey)}
+                      {sortIcon(key as SortKey)}
                     </button>
                   </th>
                 ))}
-                <th className="px-4 py-3 font-bold">Actions</th>
+                <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Password</th>
+                <th className="px-5 py-3 text-right text-xs font-bold uppercase tracking-wide text-slate-500">Actions</th>
               </tr>
             </thead>
-
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredOrganizations.map((org) => (
-                <tr key={org.id} className="text-slate-700">
-                  <td className="px-4 py-4 font-semibold text-slate-950">
-                    {org.name}
-                  </td>
-                  <td className="px-4 py-4">{org.adminUserId}</td>
-                  <td className="px-4 py-4">{org.adminPassword}</td>
-                  <td className="px-4 py-4">{org.admins}</td>
-                  <td className="px-4 py-4">{org.candidates}</td>
-                  <td className="px-4 py-4">{org.quizzes}</td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        org.status === "active"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {org.status}
+            <tbody>
+              {filteredAdmins.map((admin) => (
+                <tr key={admin.id} className="border-b border-slate-100 transition hover:bg-slate-50/70">
+                  <td className="px-5 py-4 font-bold text-slate-950">{admin.displayId}</td>
+                  <td className="px-5 py-4 font-semibold text-slate-900">{admin.name}</td>
+                  <td className="px-5 py-4 text-slate-600">{admin.email}</td>
+                  <td className="px-5 py-4">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold capitalize ${admin.status === "active" ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100" : "bg-red-50 text-red-700 ring-1 ring-red-100"}`}>
+                      {admin.status}
                     </span>
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-5 py-4 text-slate-600">{admin.createdDate}</td>
+                  <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
+                      <span className="min-w-28 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs font-bold text-slate-800 ring-1 ring-slate-200">
+                        {visiblePasswords.includes(admin.id) ? admin.temporaryPassword || "-" : "********"}
+                      </span>
+                      <button type="button" onClick={() => togglePassword(admin.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50" aria-label="Show password">
+                        {visiblePasswords.includes(admin.id) ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                      <button type="button" onClick={() => copyPassword(admin)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50" aria-label="Copy password">
+                        <Clipboard size={15} />
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="relative inline-flex">
                       <button
                         type="button"
-                        onClick={() => handleEdit(org)}
-                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                        onClick={() => setActionMenuId((current) => (current === admin.id ? null : admin.id))}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                        aria-label={`Open actions for ${admin.name}`}
                       >
-                        <Pencil size={14} />
-                        Edit
+                        <MoreHorizontal size={16} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleStatusToggle(org.id)}
-                        className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold ${
-                          org.status === "active"
-                            ? "border-red-100 bg-red-50 text-red-700 hover:bg-red-100"
-                          : "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        }`}
-                      >
-                        {org.status === "active" ? <Ban size={14} /> : <ShieldCheck size={14} />}
-                        {org.status === "active" ? "Deactivate" : "Activate"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(org.id)}
-                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 size={14} />
-                        Delete
-                      </button>
+
+                      {actionMenuId === admin.id ? (
+                        <div className="absolute right-0 top-10 z-30 w-48 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
+                          <button type="button" onClick={() => editAdmin(admin)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            <Pencil size={15} />
+                            Edit
+                          </button>
+                          <button type="button" onClick={() => setConfirmId(admin.id)} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${admin.status === "active" ? "text-red-700 hover:bg-red-50" : "text-emerald-700 hover:bg-emerald-50"}`}>
+                            {admin.status === "active" ? <Ban size={15} /> : <ShieldCheck size={15} />}
+                            {admin.status === "active" ? "Deactivate" : "Activate"}
+                          </button>
+                          <button type="button" onClick={() => resetPassword(admin.id)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            <KeyRound size={15} />
+                            Reset Password
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
               ))}
 
-              {filteredOrganizations.length === 0 ? (
+              {filteredAdmins.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-10 text-center text-sm text-slate-500"
-                  >
-                    No organizations found.
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                    No admins found.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
+
+        {confirmId ? (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+              <h3 className="text-lg font-black text-slate-950">Confirm status change</h3>
+              <p className="mt-2 text-sm text-slate-500">This updates admin access immediately.</p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" onClick={() => setConfirmId(null)} className="btn-secondary">Cancel</button>
+                <button type="button" onClick={() => toggleStatus(confirmId)} className="btn-primary">Confirm</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {importSummary ? (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/40 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-black text-slate-950">CSV Upload Result</h3>
+                  <p className="mt-1 text-sm text-slate-500">Validation completed before import.</p>
+                </div>
+                <button type="button" onClick={() => setImportSummary(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close result modal">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {[
+                  ["Total Records", importSummary.totalRecords],
+                  ["Valid Records", importSummary.validRecords],
+                  ["Duplicate Records", importSummary.duplicateRecords],
+                  ["Invalid Records", importSummary.invalidRecords],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+                    <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button type="button" onClick={downloadErrors} disabled={!importSummary.issues.length} className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60">
+                  <Download size={16} />
+                  Error Report
+                </button>
+                <button type="button" onClick={() => setImportSummary(null)} className="btn-primary">Done</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
     </AppShell>
   );

@@ -1,7 +1,3 @@
-"use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
   Ban,
   Building2,
@@ -14,16 +10,6 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { organizations } from "@/mock/organizations";
 
 export default function SuperAdminDashboard() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const access = localStorage.getItem("superAdminAccess");
-
-    if (!access) {
-      router.push("/super-admin");
-    }
-  }, [router]);
-
   return (
     <AppShell
       role="super-admin"

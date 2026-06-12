@@ -15,20 +15,20 @@ import { MotionBlock } from "@/components/ui/MotionBlock";
 
 const superAdminNav = [
   {
-    href: "/super-admin",
+    href: "/super-admin/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
   },
   {
     href: "/super-admin/organizations",
-    label: "Organizations",
+    label: "Admins",
     icon: Building2,
   },
 ];
 
 const adminNav = [
   {
-    href: "/admin",
+    href: "/admin/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
   },
@@ -56,17 +56,17 @@ const adminNav = [
 
 const studentNav = [
   {
-    href: "/student",
+    href: "/candidate/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
   },
   {
-    href: "/student/quiz",
+    href: "/candidate/quiz",
     label: "Attempt Quiz",
     icon: BookOpen,
   },
   {
-    href: "/student/result",
+    href: "/candidate/result",
     label: "Scorecard",
     icon: Medal,
   },
@@ -79,7 +79,7 @@ export function AppShell({
   subtitle,
 }: {
   children: React.ReactNode;
-  role?: "super-admin" | "admin" | "student";
+  role?: "super-admin" | "admin" | "student" | "candidate";
   title: string;
   subtitle?: string;
 }) {

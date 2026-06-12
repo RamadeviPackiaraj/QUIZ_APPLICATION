@@ -1,20 +1,46 @@
-export const mockUsers = {
-  superAdmin: {
+import type { ManagedUser } from "@/types";
+
+export const mockUsers: ManagedUser[] = [
+  {
+    id: "usr-super-001",
+    displayId: "SUP-0001",
+    name: "Super Admin",
     email: "superadmin@quizapp.com",
-    password: "super123",
-    accessCode: "SUPER2026",
-    role: "super-admin",
+    role: "SUPER_ADMIN",
+    passwordHash: "mock-hash-super123",
+    temporaryPassword: "super123",
+    status: "active",
+    createdDate: "2026-06-01",
+    isFirstLogin: false,
   },
-
-  admin: {
+  {
+    id: "usr-admin-001",
+    displayId: "ADM-0001",
+    name: "Aptora Admin",
     email: "admin@quizapp.com",
-    password: "admin123",
-    role: "admin",
+    role: "ADMIN",
+    passwordHash: "mock-hash-admin123",
+    temporaryPassword: "admin123",
+    status: "active",
+    createdDate: "2026-06-03",
+    isFirstLogin: true,
   },
+  {
+    id: "usr-candidate-001",
+    displayId: "CAN-0001",
+    name: "Aarav Mehta",
+    email: "aarav@example.com",
+    role: "CANDIDATE",
+    department: "React Advanced",
+    passwordHash: "mock-hash-student123",
+    temporaryPassword: "student123",
+    status: "active",
+    createdDate: "2026-06-04",
+    isFirstLogin: true,
+  },
+];
 
-  student: {
-    username: "student001",
-    password: "student123",
-    role: "student",
-  },
+export const userSeed = {
+  admins: mockUsers.filter((user) => user.role === "ADMIN"),
+  candidates: mockUsers.filter((user) => user.role === "CANDIDATE"),
 };

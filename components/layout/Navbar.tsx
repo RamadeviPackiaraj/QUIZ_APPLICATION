@@ -29,13 +29,15 @@ export function Navbar({
       localStorage.removeItem("superAdminAccess");
       localStorage.removeItem("authUser");
       localStorage.removeItem("selectedRole");
+      localStorage.removeItem("mock-session");
+      localStorage.removeItem("postPasswordRoute");
     }
 
     router.push(actionHref);
   };
 
   const handleNavClick = (href: string) => {
-    if (href !== "/student/quiz" || typeof document === "undefined" || document.fullscreenElement) {
+    if (!href.endsWith("/quiz") || typeof document === "undefined" || document.fullscreenElement) {
       return;
     }
 
