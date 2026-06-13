@@ -1,14 +1,14 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Ban, ChevronsUpDown, Clipboard, Download, Eye, EyeOff, FileText, FileUp, KeyRound, MoreHorizontal, Pencil, Plus, Search, ShieldCheck, UploadCloud, X } from "lucide-react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { useToast } from "@/components/ui/Toast";
-import { userSeed } from "@/mock/users";
 import { buildErrorReport, ImportSummary, validateAdminCsv } from "@/lib/importValidation";
-import { downloadCsv, printRows } from "@/lib/downloads";
-import { createManagedUser, generateTemporaryPassword, hashPassword } from "@/lib/userManagement";
+import { useAuthStore } from "@/store/authStore";
+import usersApi from "@/services/usersApi";
 import type { ManagedUser } from "@/types";
 
 const emptyForm = {
@@ -47,8 +47,10 @@ function StatCard({
 }
 
 export default function OrganizationsPage() {
+  const router = useRouter();
   const { showToast } = useToast();
-  const [admins, setAdmins] = useState<ManagedUser[]>(userSeed.admins);
+  const token = useAuthStore((state) => state.getToken());
+  const [admins, setAdmins] = useState<ManagedUser[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [showForm, setShowForm] = useState(false);
@@ -63,6 +65,37 @@ export default function OrganizationsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("displayId");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [form, setForm] = useState(emptyForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Load admins on mount
+  useEffect(() => {
+    loadAdmins();
+  }, []);
+
+  const loadAdmins = async () => {
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await usersApi.getAllAdmins(token);
+      if (response.success) {
+        setAdmins(response.data || []);
+      }
+    } catch (error) {
+      console.error("Error loading admins:", error);
+      showToast({
+        tone: "info",
+        title: "Error",
+        message: "Failed to load admins. Please refresh the page.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredAdmins = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -116,8 +149,10 @@ export default function OrganizationsPage() {
     setForm(emptyForm);
   };
 
-  const handleSave = (event: FormEvent<HTMLFormElement>) => {
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!token) return;
+
     const name = form.name.trim();
     const email = form.email.trim().toLowerCase();
 
@@ -128,23 +163,36 @@ export default function OrganizationsPage() {
       return;
     }
 
-    if (editingId) {
-      setAdmins((current) =>
-        current.map((admin) => (admin.id === editingId ? { ...admin, name, email } : admin))
-      );
-      showToast({ tone: "success", title: "Admin updated" });
-    } else {
-      const admin = createManagedUser({
-        name,
-        email,
-        role: "ADMIN",
-        existingUsers: admins,
+    setSaving(true);
+    try {
+      if (editingId) {
+        await usersApi.updateAdmin(token, editingId, { name, email });
+        setAdmins((current) =>
+          current.map((admin) => (admin.id === editingId ? { ...admin, name, email } : admin))
+        );
+        showToast({ tone: "success", title: "Admin updated" });
+      } else {
+        const response = await usersApi.createAdmin(token, { name, email });
+        if (response.success) {
+          setAdmins((current) => [response.data.user, ...current]);
+          showToast({ 
+            tone: "success", 
+            title: "Admin created", 
+            message: `${response.data.user.displayId} is active. Credentials were emailed.` 
+          });
+        }
+      }
+      closeForm();
+    } catch (error) {
+      console.error("Error saving admin:", error);
+      showToast({
+        tone: "info",
+        title: "Error",
+        message: error instanceof Error ? error.message : "Failed to save admin",
       });
-      setAdmins((current) => [admin, ...current]);
-      showToast({ tone: "success", title: "Admin created", message: `${admin.displayId} is active. Credentials were emailed.` });
+    } finally {
+      setSaving(false);
     }
-
-    closeForm();
   };
 
   const editAdmin = (admin: ManagedUser) => {
@@ -164,59 +212,97 @@ export default function OrganizationsPage() {
 
   const handleCsv = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || !token) return;
 
-    setCsvFileName(file.name);
-    setUploadProgress(32);
-    const summary = validateAdminCsv(await file.text(), admins);
-    const imported = summary.validRows.map((row, index) =>
-      createManagedUser({
-        name: row.name,
-        email: row.email,
-        role: "ADMIN",
-        existingUsers: [...admins, ...summary.validRows.slice(0, index).map((item, itemIndex) => ({
-          id: `preview-${itemIndex}`,
-          displayId: `ADM-${String(admins.length + itemIndex + 1).padStart(4, "0")}`,
-          name: item.name,
-          email: item.email,
-          role: "ADMIN" as const,
-          passwordHash: "",
-          status: "active" as const,
-          createdDate: "",
-          isFirstLogin: true,
-        }))],
-      })
-    );
+    setSaving(true);
+    try {
+      setCsvFileName(file.name);
+      setUploadProgress(32);
 
-    setAdmins((current) => [...imported, ...current]);
-    setImportSummary(summary);
-    setUploadProgress(100);
-    showToast({ tone: "success", title: "Import completed", message: `${summary.validRecords} admins imported.` });
+      const csvContent = await file.text();
+      const summary = validateAdminCsv(csvContent, admins);
+      setUploadProgress(64);
+
+      const response = await usersApi.bulkCreateAdmins(token, csvContent);
+      setUploadProgress(90);
+
+      if (response.success) {
+        // Add newly created admins to the list
+        setAdmins((current) => [...response.data.created.map((item) => item.user), ...current]);
+        
+        // Create import summary from response
+        const importSummary: ImportSummary<{ name: string; email: string }> = {
+          totalRecords: response.data.summary.totalRecords,
+          validRecords: response.data.summary.validRecords,
+          duplicateRecords: response.data.summary.duplicateRecords,
+          invalidRecords: response.data.summary.invalidRecords,
+          issues: response.data.summary.issues,
+          validRows: response.data.created.map((item) => ({ name: item.user.name, email: item.user.email })),
+        };
+        
+        setImportSummary(importSummary);
+        setUploadProgress(100);
+        showToast({ tone: "success", title: "Import completed", message: `${response.data.summary.validRecords} admins imported.` });
+      }
+    } catch (error) {
+      console.error("Error uploading CSV:", error);
+      showToast({
+        tone: "info",
+        title: "Error",
+        message: error instanceof Error ? error.message : "Failed to upload CSV",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const toggleStatus = (id: string) => {
-    setAdmins((current) =>
-      current.map((admin) =>
-        admin.id === id ? { ...admin, status: admin.status === "active" ? "inactive" : "active" } : admin
-      )
-    );
-    setConfirmId(null);
-    setActionMenuId(null);
-    showToast({ tone: "success", title: "Status updated" });
+  const toggleStatus = async (id: string) => {
+    if (!token) return;
+
+    try {
+      await usersApi.toggleAdminStatus(token, id);
+      setAdmins((current) =>
+        current.map((admin) =>
+          admin.id === id ? { ...admin, status: admin.status === "active" ? "inactive" : "active" } : admin
+        )
+      );
+      setConfirmId(null);
+      setActionMenuId(null);
+      showToast({ tone: "success", title: "Status updated" });
+    } catch (error) {
+      console.error("Error toggling status:", error);
+      showToast({
+        tone: "info",
+        title: "Error",
+        message: "Failed to update status",
+      });
+    }
   };
 
-  const resetPassword = (id: string) => {
-    const temporaryPassword = generateTemporaryPassword();
-    setAdmins((current) =>
-      current.map((admin) =>
-        admin.id === id
-          ? { ...admin, temporaryPassword, passwordHash: hashPassword(temporaryPassword), isFirstLogin: true }
-          : admin
-      )
-    );
-    console.info("[EMAIL]", "Admin reset password credentials sent", { id, temporaryPassword });
-    showToast({ tone: "success", title: "Password reset", message: "Temporary credentials were emailed." });
-    setActionMenuId(null);
+  const resetPassword = async (id: string) => {
+    if (!token) return;
+
+    try {
+      const response = await usersApi.resetAdminPassword(token, id);
+      if (response.success) {
+        setAdmins((current) =>
+          current.map((admin) =>
+            admin.id === id
+              ? { ...admin, temporaryPassword: response.data.temporaryPassword, isFirstLogin: true }
+              : admin
+          )
+        );
+        showToast({ tone: "success", title: "Password reset", message: "Temporary credentials were emailed." });
+      }
+      setActionMenuId(null);
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      showToast({
+        tone: "info",
+        title: "Error",
+        message: "Failed to reset password",
+      });
+    }
   };
 
   const togglePassword = (id: string) => {
@@ -239,6 +325,37 @@ export default function OrganizationsPage() {
     link.click();
     URL.revokeObjectURL(link.href);
   };
+
+  const handleExport = async (format: "csv" | "pdf") => {
+    if (!token) return;
+
+    try {
+      const blob = await usersApi.exportAdmins(token, format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = format === "csv" ? "admins.csv" : "admins.pdf";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error exporting:", error);
+      showToast({
+        tone: "info",
+        title: "Error",
+        message: "Failed to export admins",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <AppShell role="super-admin" title="Organization Admins" subtitle="Create and manage admin access with generated credentials.">
+        <div className="flex items-center justify-center py-12">
+          <p className="text-slate-500">Loading admins...</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell role="super-admin" title="Organization Admins" subtitle="Create and manage admin access with generated credentials.">
@@ -267,11 +384,11 @@ export default function OrganizationsPage() {
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
-              <button type="button" onClick={() => downloadCsv("admins.csv", exportRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+              <button type="button" onClick={() => handleExport("csv")} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
                 <Download size={16} />
                 CSV
               </button>
-              <button type="button" onClick={() => printRows("Admin Credentials", exportRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+              <button type="button" onClick={() => handleExport("pdf")} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
                 <FileText size={16} />
                 PDF
               </button>
@@ -304,7 +421,7 @@ export default function OrganizationsPage() {
                   <FileUp className="mx-auto text-[#1E3A8A]" size={24} />
                   <span className="mt-2 text-sm font-bold text-slate-950">{csvFileName || "Choose admin CSV"}</span>
                   <span className="mt-1 text-xs text-slate-500">Admin Name, Email Address</span>
-                  <input type="file" accept=".csv,text/csv" onChange={handleCsv} className="sr-only" />
+                  <input type="file" accept=".csv,text/csv" onChange={handleCsv} className="sr-only" disabled={saving} />
                 </label>
                 <div className="min-w-48">
                   <div className="h-2 overflow-hidden rounded-full bg-slate-200">
@@ -315,11 +432,11 @@ export default function OrganizationsPage() {
               </div>
             ) : (
               <form onSubmit={handleSave} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Admin Name" className="input-soft px-3 py-2.5 text-sm" required />
-                <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Admin Email" type="email" className="input-soft px-3 py-2.5 text-sm" required />
-                <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#111827]">
+                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Admin Name" className="input-soft px-3 py-2.5 text-sm" required disabled={saving} />
+                <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Admin Email" type="email" className="input-soft px-3 py-2.5 text-sm" required disabled={saving} />
+                <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#111827] disabled:opacity-70" disabled={saving}>
                   <ShieldCheck size={16} />
-                  Save
+                  {saving ? "Saving..." : "Save"}
                 </button>
               </form>
             )}

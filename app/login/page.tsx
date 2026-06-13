@@ -7,8 +7,14 @@ import { Eye, EyeOff, LockKeyhole, Mail, Shield } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
 import { useToast } from "@/components/ui/Toast";
-import { authenticateByEmail } from "@/lib/userManagement";
 import { useAuthStore } from "@/store/authStore";
+import authApi from "@/services/authApi";
+
+const roleRoute: Record<string, string> = {
+  "super-admin": "/super-admin/dashboard",
+  "admin": "/admin/dashboard",
+  "candidate": "/candidate/dashboard",
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,41 +25,63 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSignIn = (event: FormEvent<HTMLFormElement>) => {
+  const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
 
-    window.setTimeout(() => {
-      const session = authenticateByEmail(email, password);
-      setLoading(false);
+    try {
+      const response = await authApi.login(email, password);
 
-      if (!session) {
+      if (!response.success) {
         showToast({
           tone: "info",
           title: "Sign in failed",
-          message: "Check the email address and password.",
+          message: response.message || "Check the email address and password.",
         });
+        setLoading(false);
         return;
       }
 
+      const { user, token } = response.data;
+      
+      // Validate role is in roleRoute (strict - no defaults)
+      const frontendRole = user.role as "super-admin" | "admin" | "candidate";
+      if (!roleRoute[frontendRole]) {
+        throw new Error(`Unauthorized role: ${frontendRole}`);
+      }
+
+      // Store auth data
       login(
-        session.user.role === "SUPER_ADMIN"
-          ? "super-admin"
-          : session.user.role === "ADMIN"
-          ? "admin"
-          : "candidate",
-        session.user.name,
-        session.user.email,
-        session.user.isFirstLogin
+        frontendRole,
+        user.name,
+        user.email,
+        user.isFirstLogin,
+        token,
+        user.id
       );
-      localStorage.setItem("postPasswordRoute", session.finalRoute);
+
+      const finalRoute = roleRoute[frontendRole]!;
+      const targetRoute = user.isFirstLogin ? "/change-password" : finalRoute;
+      
+      localStorage.setItem("postPasswordRoute", finalRoute);
+
       showToast({
         tone: "success",
         title: "Signed in",
-        message: session.user.isFirstLogin ? "Please change your temporary password." : "Redirecting to your dashboard.",
+        message: user.isFirstLogin ? "Please change your temporary password." : "Redirecting to your dashboard.",
       });
-      router.push(session.route);
-    }, 450);
+
+      setLoading(false);
+      router.push(targetRoute);
+    } catch (error) {
+      console.error("Login error:", error);
+      showToast({
+        tone: "info",
+        title: "Sign in failed",
+        message: error instanceof Error ? error.message : "An unexpected error occurred.",
+      });
+      setLoading(false);
+    }
   };
 
   return (
@@ -82,6 +110,7 @@ export default function LoginPage() {
                   placeholder="name@company.com"
                   type="email"
                   required
+                  disabled={loading}
                 />
               </div>
             </label>
@@ -97,12 +126,14 @@ export default function LoginPage() {
                   className="w-full bg-transparent text-sm outline-none"
                   placeholder="Enter password"
                   required
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
                   className="rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-900"
                   aria-label={showPassword ? "Hide password" : "Show password"}
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>

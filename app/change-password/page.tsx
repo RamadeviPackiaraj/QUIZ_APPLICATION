@@ -7,18 +7,20 @@ import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
 import { useToast } from "@/components/ui/Toast";
-import { hashPassword } from "@/lib/userManagement";
 import { useAuthStore } from "@/store/authStore";
+import authApi from "@/services/authApi";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const token = useAuthStore((state) => state.getToken());
   const completeFirstLogin = useAuthStore((state) => state.completeFirstLogin);
   const { showToast } = useToast();
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (newPassword.length < 8) {
@@ -31,13 +33,27 @@ export default function ChangePasswordPage() {
       return;
     }
 
+    if (!token) {
+      showToast({ tone: "info", title: "Authentication Error", message: "No token found. Please login again." });
+      router.push("/login");
+      return;
+    }
+
     setLoading(true);
-    window.setTimeout(() => {
-      console.info("[PASSWORD]", "Password changed", { passwordHash: hashPassword(newPassword), is_first_login: false });
-      completeFirstLogin();
-      showToast({ tone: "success", title: "Password updated", message: "First-login requirement completed." });
-      router.push(localStorage.getItem("postPasswordRoute") || "/admin/dashboard");
-    }, 450);
+    try {
+      const response = await authApi.changePassword(token, currentPassword, newPassword);
+      
+      if (response.success) {
+        completeFirstLogin();
+        showToast({ tone: "success", title: "Password updated", message: "First-login requirement completed." });
+        router.push(localStorage.getItem("postPasswordRoute") || "/admin/dashboard");
+      }
+    } catch (error) {
+      console.error("Password change error:", error);
+      showToast({ tone: "info", title: "Password update failed", message: error instanceof Error ? error.message : "Failed to update password." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,6 +71,14 @@ export default function ChangePasswordPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
+            <input
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              placeholder="Current Password (temporary password)"
+              type="password"
+              className="input-soft px-4 py-3 text-sm"
+              required
+            />
             <input
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}

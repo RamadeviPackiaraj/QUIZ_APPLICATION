@@ -18,14 +18,12 @@ export type Student = {
   completed: number;
 };
 
-export type UserRole = "SUPER_ADMIN" | "ADMIN" | "CANDIDATE";
-
 export type ManagedUser = {
   id: string;
   displayId: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: Role;
   department?: string;
   passwordHash: string;
   temporaryPassword?: string;
